@@ -54,7 +54,12 @@ def load_articles():
 
 @st.cache_data(ttl=300)
 def load_pipeline_logs():
-    """Load recent pipeline logs for monitoring."""
+    """Load recent pipeline logs for monitoring.
+
+    Scoped to the last 7 days so resolved historical failures do not surface
+    as current issues. The pgdata volume is external and survives rebuilds,
+    so the logs table retains entries indefinitely.
+    """
 
     query = """
         SELECT
@@ -63,6 +68,7 @@ def load_pipeline_logs():
             message,
             details
         FROM pipeline_logs
+        WHERE run_timestamp > NOW() - INTERVAL '7 days'
         ORDER BY run_timestamp DESC
         LIMIT 50
     """
