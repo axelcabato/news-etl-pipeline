@@ -33,7 +33,7 @@ with DAG(
         api_version='auto',
         auto_remove=True,
         docker_url='unix://var/run/docker.sock',
-        network_mode='news-etl_default',
+        network_mode='news-etl-pipeline_default',
         environment={
             'NEWS_API_KEY': '{{ var.value.NEWS_API_KEY }}',
             'POSTGRES_URL': 'postgresql://user:password@postgres:5432/news_db',
