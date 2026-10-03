@@ -54,7 +54,12 @@ def load_articles():
 
 @st.cache_data(ttl=300)
 def load_pipeline_logs():
-    """Load recent pipeline logs for monitoring."""
+    """Load recent pipeline logs for monitoring.
+
+    Scoped to the last 7 days so resolved historical failures do not surface
+    as current issues. The pgdata volume is external and survives rebuilds,
+    so the logs table retains entries indefinitely.
+    """
 
     query = """
         SELECT
@@ -63,6 +68,7 @@ def load_pipeline_logs():
             message,
             details
         FROM pipeline_logs
+        WHERE run_timestamp > NOW() - INTERVAL '7 days'
         ORDER BY run_timestamp DESC
         LIMIT 50
     """
@@ -92,11 +98,20 @@ def render_metrics(df: pd.DataFrame):
 
     with col2:
         avg_sentiment = df['sentiment_score'].mean()
-        sentiment_label = "Positive" if avg_sentiment > 0.1 else "Negative" if avg_sentiment < -0.1 else "Neutral"
+        if avg_sentiment < -0.3:
+            sentiment_label = "Negative"
+            sentiment_color = "red"
+        elif avg_sentiment > 0.3:
+            sentiment_label = "Positive"
+            sentiment_color = "green"
+        else:
+            sentiment_label = "Neutral"
+            sentiment_color = "gray"
         st.metric(
-            label="Avg Sentiment",
+            label="Average Sentiment",
             value=f"{avg_sentiment:.3f}",
-            delta=sentiment_label
+            delta=sentiment_label,
+            delta_color="off"
         )
 
     with col3:
@@ -112,27 +127,51 @@ def render_articles_over_time(df: pd.DataFrame):
 
     st.subheader("📈 Articles Over Time")
 
-    # Filter out rows with invalid dates
-    df_valid = df.dropna(subset=['published_at'])
+    df_valid = df.dropna(subset=['published_at']).copy()
 
     if df_valid.empty:
         st.warning("No articles with valid publication dates")
         return
 
-    # Group by date
     df_valid['date'] = df_valid['published_at'].dt.date
-    daily_counts = df_valid.groupby(
-        'date').size().reset_index(name='article_count')
+    daily_counts = df_valid.groupby('date').size().reset_index(name='article_count')
     daily_counts['date'] = pd.to_datetime(daily_counts['date'])
 
-    fig = px.area(
-        daily_counts,
-        x='date',
-        y='article_count',
-        title='Daily Article Ingestion',
-        labels={'date': 'Date', 'article_count': 'Articles'},
-        color_discrete_sequence=['#1f77b4']
-    )
+    if len(daily_counts) == 1:
+        single_date = daily_counts['date'].iloc[0]
+        article_count = daily_counts['article_count'].iloc[0]
+        
+        fig = go.Figure(data=[
+            go.Bar(
+                x=[single_date],
+                y=[article_count],
+                marker_color='#1f77b4',
+                width=[1000 * 60 * 60 * 24 * 0.2]  # Narrower: 20% of a day
+            )
+        ])
+        
+        fig.update_layout(
+            title='Daily Article Ingestion',
+            xaxis=dict(
+                range=[single_date - pd.Timedelta(days=1), single_date + pd.Timedelta(days=1)],
+                tickformat='%Y-%m-%d',
+                title='Date'
+            ),
+            yaxis=dict(
+                range=[0, article_count * 1.2],
+                title='Number of Articles'
+            ),
+            hovermode='x unified'
+        )
+    else:
+        fig = px.area(
+            daily_counts, x='date', y='article_count',
+            title='Daily Article Ingestion',
+            labels={'date': 'Date', 'article_count': 'Articles'},
+            color_discrete_sequence=['#1f77b4'], markers=True
+        )
+        fig.update_xaxes(tickformat='%Y-%m-%d')
+        fig.update_yaxes(rangemode='tozero')
 
     fig.update_layout(
         xaxis_title="Date",
@@ -142,7 +181,6 @@ def render_articles_over_time(df: pd.DataFrame):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Add summary statistics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.caption(

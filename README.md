@@ -46,6 +46,22 @@ flowchart TB
     ETL -->|"Fetches articles"| API
 ```
 
+## Screenshots
+
+### Airflow DAG
+![Airflow DAG](images/airflow-dag.png)
+
+### Dashboard
+![Dashboard Overview](images/dashboard-1.png)
+
+![Dashboard Details](images/dashboard-2.png)
+
+### Sentiment Analysis
+![Sentiment Analysis](images/sentiment-chart.png)
+
+### Database Query
+![Terminal Query](images/terminal-query.png)
+
 ## Key Features
 
 ### Incremental Loading

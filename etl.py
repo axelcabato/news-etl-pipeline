@@ -60,9 +60,9 @@ def calculate_sentiment(text: str | None) -> float | None:
 def get_latest_article_date(cursor) -> str | None:
     """
     Retrieve the most recent article's publication date from the database.
-    
-    Enables incremental loading by providing a cutoff date for API requests,
-    reducing duplicate fetches and API usage.
+
+    Enables incremental loading by filtering fetched articles client-side,
+    since the free tier API endpoint doesn't support date parameters.
     """
     cursor.execute("SELECT MAX(published_at) FROM articles")
     row = cursor.fetchone()
@@ -198,25 +198,26 @@ def fetch_and_store_articles() -> None:
                 # Initialize database schema
                 _initialize_schema(cursor)
 
-                # EXTRACT: Fetch from API (with incremental logic)
+                # EXTRACT: Fetch from API (with client-side incremental filtering)
                 try:
                     # Get the latest article date for incremental loading
                     latest_date = get_latest_article_date(cursor)
 
                     if latest_date:
-                        # Incremental load: only fetch articles newer than what we have
-                        from_date = latest_date[:10]  # Extract date portion
+                        # Incremental load: fetch all recent articles, filter client-side
+                        from_date_str = latest_date[:10]  # Extract date portion (YYYY-MM-DD)
                         log_to_db(cursor, "INFO",
-                                  f"Incremental load from {from_date}")
-                        print(f"Performing incremental load from {from_date}")
-                        response_data = api.latest_api(
-                            language="en", from_date=from_date)
+                                  f"Incremental load from {from_date_str} (client-side filtering)")
+                        print(f"Performing incremental load from {from_date_str} (client-side filtering)")
                     else:
                         # Full load: no existing data
                         log_to_db(cursor, "INFO",
                                   "Performing full load (no existing data)")
                         print("Performing full load")
-                        response_data = api.latest_api(language="en")
+                        from_date_str = None
+
+                    # Fetch latest articles (free tier endpoint, no date filtering)
+                    response_data = api.latest_api(language="en")
                 except Exception as e:
                     log_to_db(cursor, "ERROR", f"API fetch failed: {str(e)}",
                               details={"exception_type": type(e).__name__})
@@ -234,26 +235,39 @@ def fetch_and_store_articles() -> None:
 
                 articles_to_store = response_data.get("results", [])
                 if not articles_to_store:
-                    if latest_date:
-                        # This is expected for incremental loads when there's nothing new
+                    log_to_db(cursor, "WARNING",
+                              "No articles returned from API")
+                    conn.commit()
+                    print("No articles found to store.")
+                    return
+
+                api_fetch_count = len(articles_to_store)
+                print(f"Successfully fetched {api_fetch_count} articles from API.")
+
+                # CLIENT-SIDE FILTERING: Only keep articles newer than latest_date
+                # This handles incremental loading on the free tier where the API
+                # endpoint doesn't support date filtering.
+                if latest_date:
+                    filtered_articles = []
+                    for article in articles_to_store:
+                        article_pub_date = article.get("pubDate")
+                        # Compare ISO format dates (e.g., "2026-07-15T12:30:00")
+                        # String comparison works because ISO format is sortable
+                        if article_pub_date and article_pub_date > latest_date:
+                            filtered_articles.append(article)
+
+                    if not filtered_articles:
                         log_to_db(cursor, "INFO",
-                                  "No new articles since last run")
+                                  f"No new articles since {latest_date}")
                         conn.commit()
-                        print(
-                            "No new articles found since last run. Pipeline complete.")
-                        return
-                    else:
-                        # This is unexpected for a full load
-                        log_to_db(cursor, "WARNING",
-                                  "No articles returned from API on full load")
-                        conn.commit()
-                        print("No articles found to store.")
+                        print(f"No new articles found since {latest_date}. Pipeline complete.")
                         return
 
-                print(
-                    f"Successfully fetched {len(articles_to_store)} articles from API.")
+                    articles_to_store = filtered_articles
+                    print(f"Filtered to {len(articles_to_store)} new articles (older {api_fetch_count - len(articles_to_store)} discarded)")
+
                 log_to_db(cursor, "INFO",
-                          f"Fetched {len(articles_to_store)} articles from API")
+                          f"Fetched {api_fetch_count} articles from API, storing {len(articles_to_store)}")
 
                 # TRANSFORM: Build article records with computed features
                 processed_articles = _transform_articles(articles_to_store)
