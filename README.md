@@ -49,18 +49,18 @@ flowchart TB
 ## Screenshots
 
 ### Airflow DAG
-![Airflow DAG](news-etl/images/airflow-dag.png)
+![Airflow DAG](images/airflow-dag.png)
 
 ### Dashboard
-![Dashboard Overview](news-etl/images/dashboard-1.png)
+![Dashboard Overview](images/dashboard-1.png)
 
-![Dashboard Details](news-etl/images/dashboard-2.png)
+![Dashboard Details](images/dashboard-2.png)
 
 ### Sentiment Analysis
-![Sentiment Analysis](news-etl/images/sentiment-chart.png)
+![Sentiment Analysis](images/sentiment-chart.png)
 
 ### Database Query
-![Terminal Query](news-etl/images/terminal-query.png)
+![Terminal Query](images/terminal-query.png)
 
 ## Key Features
 
