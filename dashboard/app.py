@@ -164,11 +164,13 @@ def render_articles_over_time(df: pd.DataFrame):
             hovermode='x unified'
         )
     else:
-        fig = px.area(
+        # Bar rather than area: ingestion happens on scattered days, and a
+        # filled area implies continuous data across the empty days between.
+        fig = px.bar(
             daily_counts, x='date', y='article_count',
             title='Daily Article Ingestion',
             labels={'date': 'Date', 'article_count': 'Articles'},
-            color_discrete_sequence=['#1f77b4'], markers=True
+            color_discrete_sequence=['#1f77b4']
         )
         fig.update_xaxes(tickformat='%Y-%m-%d')
         fig.update_yaxes(rangemode='tozero')
