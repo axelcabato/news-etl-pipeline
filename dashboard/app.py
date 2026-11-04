@@ -126,14 +126,18 @@ def render_articles_over_time(df: pd.DataFrame):
     """Visualization 1: Articles ingested over time."""
 
     st.subheader("📈 Articles Over Time")
+    st.caption("Counted by the date this pipeline ingested each article, not the date it was published.")
 
-    df_valid = df.dropna(subset=['published_at']).copy()
+    # Grouped by created_at (when this pipeline ingested the article), not
+    # published_at (when the outlet published it). This chart measures pipeline
+    # activity, which is what the project is about. See docs/decisions.md entry 3.
+    df_valid = df.dropna(subset=['created_at']).copy()
 
     if df_valid.empty:
-        st.warning("No articles with valid publication dates")
+        st.warning("No articles with valid ingestion dates")
         return
 
-    df_valid['date'] = df_valid['published_at'].dt.date
+    df_valid['date'] = df_valid['created_at'].dt.date
     daily_counts = df_valid.groupby('date').size().reset_index(name='article_count')
     daily_counts['date'] = pd.to_datetime(daily_counts['date'])
 
@@ -392,6 +396,13 @@ def render_sidebar(df: pd.DataFrame):
     - Pipeline health monitoring
 
     **Data refreshes every 5 minutes.**
+
+    ---
+
+    **Note on article dates:** the NewsData.io free tier delays article
+    access by roughly 12 hours, so publication times run about half a day
+    behind the moment this pipeline ingested them. Those timestamps are
+    stored exactly as the API reports them rather than adjusted.
     """)
 
     return df
