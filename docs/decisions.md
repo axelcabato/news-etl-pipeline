@@ -56,9 +56,36 @@ Docker had cached the pip layer; once that cache expired, pip resolved different
 
 ### Decision
 
-*Not yet made.*
+**C — generate a lock file with `uv`.** Keep the five chosen packages in
+`requirements.in`, and generate the full pinned list with:
 
-**Why:**
+```bash
+uv pip compile requirements.in -o requirements.txt \
+    --python-version 3.12 --python-platform linux
+```
+
+The platform flags matter: resolution must target the container's Linux image rather
+than the Windows host. The Dockerfile is unchanged — the generated file is an
+ordinary pip requirements file, so the image still runs `pip install -r
+requirements.txt`. `uv` is a local tool, run when dependencies change, and never
+enters the build.
+
+**Status of implementation:** decided 7 Nov 2026, not yet implemented. The project
+remains on approach A until the lock file is generated and a rebuild is verified.
+
+**Why:** C is low-cost and low-effort to implement, and its benefits are within
+reach regardless of how significant they turn out to be. It locks everything the way
+B does, but keeps the five packages actually chosen in a separate file, so the
+intent behind the dependency list stays visible instead of being buried among the
+forty-odd packages that came along with them. The extra cost over B is installing
+one tool and learning one command — and it is a command that gets reused every time
+a dependency changes, rather than hand-editing a long generated file.
+
+Rejected A because it is the option that accepts recurring breakage: each incident
+gets patched reactively after it has already cost a working session, and incident 3
+happened under A with every direct dependency already pinned. Rejected Poetry
+because restructuring the project around `pyproject.toml` is days of work for the
+same lock file.
 
 ---
 
